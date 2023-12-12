@@ -1,5 +1,6 @@
 import { extendType, intArg, list, nonNull, objectType, stringArg } from "nexus";
 import { NexusGenObjects } from "../../nexus-typegen";
+import { context } from "../context";
 
 export const Link = objectType({
     name:'Link',
@@ -10,18 +11,7 @@ export const Link = objectType({
     },
 })
 
-let links: NexusGenObjects['Link'][]= [
-    {
-        id:1,
-        url:'www.org',
-        description:'Fullstack tutorial in graphql'
-    },
-    {
-        id:2,
-        url:'www.com',
-        description:'Backend tutorial in graphql'
-    },
-]
+
 
 
 export const LinkQuery = extendType({
@@ -30,7 +20,7 @@ export const LinkQuery = extendType({
         t.nonNull.list.nonNull.field('feed',{
             type:'Link',
             resolve(parent,args,context, info){
-                return links
+                return context.prisma.link.findMany()
             }
         })
         t.nonNull.list.nonNull.field('link', {
@@ -38,12 +28,16 @@ export const LinkQuery = extendType({
             args:{
                 id: nonNull(intArg())
             },
-            resolve(parent,args,context){
+            resolve: async(parent,args,context)=>{
                 const {id} = args
-                const link = links.find((l)=> l.id == id)
+                const link =await context.prisma.link.findUnique({
+                    where:{
+                        id:id
+                    }
+                })
                 return link ? [link] : []
             }
-        } )
+        })
     },
 })
 
@@ -58,14 +52,13 @@ export const LinkMutation = extendType({
             },
             resolve(parent,args,context){
                 const {description,url} = args
-                let idCount = links.length + 1
-                const link = {
-                    id: idCount,
-                    description: description,
-                    url: url
-                }
-                links.push(link)
-                return link
+                const newLink = context.prisma.link.create({
+                    data:{
+                        description:description,
+                        url:url
+                    }
+                })
+                return newLink
             }
         })
         t.nonNull.field('deleteLink',{
@@ -73,11 +66,14 @@ export const LinkMutation = extendType({
             args:{
                 id: nonNull(intArg())
             },
-            resolve(parent,args,context){
+            resolve: async(parent,args,context)=>{
                 const {id} = args
-                const initialLinks = links.length
-                links = links.filter((l)=> l.id != id)
-                return links.length !== initialLinks
+                const deleted = await context.prisma.link.delete({
+                    where:{
+                        id:id
+                    }
+                })
+                return true
             }
         })
         t.nonNull.field('updateLink', {
@@ -87,13 +83,25 @@ export const LinkMutation = extendType({
                 description: nonNull(stringArg()),
                 url: nonNull(stringArg())
             },
-            resolve(parent,args,context){
+            resolve: async(parent,args,context)=>{
                 const {id,description,url} = args
-                let linkIndex = links.findIndex((l)=> l.id == id)
-                if(linkIndex == -1){
+                let linkFound = await context.prisma.link.findFirst({
+                    where:{
+                        id:id
+                    }
+                })
+                if(!linkFound){
                     return false
                 }
-                links[linkIndex] = {...links[linkIndex], description:description , url:url}
+                await context.prisma.link.update({
+                    where:{
+                        id:id
+                    },
+                    data:{
+                        description:description,
+                        url:url
+                    }
+                })
                 return  true 
             }
         })
